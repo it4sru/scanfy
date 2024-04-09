@@ -6,6 +6,7 @@ import ipaddress
 import socket
 import asyncio
 import platform
+import aioping
 from toga.style import Pack
 from toga.style.pack import COLUMN
 
@@ -14,8 +15,7 @@ class ScanfyApp(toga.App):
         self.main_window = toga.MainWindow(title="Scanfy - Network Scanner", size=(300, 400))
         self.interface_dropdown = toga.Selection(on_change=self.interface_selected)
         self.text_label_hostname = toga.Label('Hostname:', style=Pack(padding=5))
-        self.text_label_ip = toga.Label('IP Address:', style=Pack(padding=5))
-        self.text_label_subnet_mask = toga.Label('Subnet Mask:', style=Pack(padding=5))
+        self.text_label_ip_mask = toga.Label('IP Address:', style=Pack(padding=5))
         self.text_label_subnet = toga.Label('Subnet:', style=Pack(padding=5))
         self.scan_button = toga.Button('Scan', on_press=self.execute_scan)
         self.status_label = toga.Label('', style=Pack(padding=5))
@@ -25,8 +25,7 @@ class ScanfyApp(toga.App):
         content_box = toga.Box(style=Pack(direction=COLUMN, padding=10))
         content_box.add(self.interface_dropdown)
         content_box.add(self.text_label_hostname)
-        content_box.add(self.text_label_ip)
-        content_box.add(self.text_label_subnet_mask)
+        content_box.add(self.text_label_ip_mask)
         content_box.add(self.text_label_subnet)
         content_box.add(self.scan_button)
         content_box.add(self.status_label)
@@ -69,8 +68,7 @@ class ScanfyApp(toga.App):
             subnet = self.get_subnet(selected_interface)
 
             self.text_label_hostname.text = f"Hostname: {hostname}"
-            self.text_label_ip.text = f"IP Address: {ip_address}"
-            self.text_label_subnet_mask.text = f"Subnet Mask: {subnet_mask}"
+            self.text_label_ip_mask.text = f"IP Address: {ip_address}/{subnet_mask}"
             self.text_label_subnet.text = f"Subnet: {subnet}"
 
     def get_hostname(self): # получаем имя хоста
@@ -108,22 +106,29 @@ class ScanfyApp(toga.App):
 
         async def scan(progress_callback):
             async def process_ip(ip_address):
-                ping_process = await asyncio.create_subprocess_shell(
-                    f"ping -c 1 -W 1 {ip_address}",
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    encoding=None
-                )
-                _, stderr = await ping_process.communicate()
-
-                status = "Not reachable"
-                if ping_process.returncode == 0 and "1 packets transmitted, 1 received" in stderr:
-                    status = "Reachable"
-
+                try:
+                    result = await asyncio.create_subprocess_shell(
+                        f"ping -n 1 {ip_address}",
+                        stdin=asyncio.subprocess.PIPE,
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE,
+                        shell=True
+                    )
+                    await result.communicate()
+                    
+                    if result.returncode == 0:
+                        status = "Reachable"
+                    else:
+                        status = "Not reachable"
+                        
+                except Exception as e:
+                    status = "Error: " + str(e)
+                    
                 await progress_callback(ip_address, status)
 
-            for ip in hosts:
-                await process_ip(str(ip))
+            # await asyncio.gather(*[process_ip(str(ip)) for ip in hosts]) #  для параллельного выполнения асинхронных задач
+            for ip in hosts:                    # для запуска последовательного
+                await process_ip(str(ip))       # синхронного сканирования 
 
         async def progress_callback(ip_address, status):
             self.update_detailed_list(ip_address, status)
@@ -133,7 +138,8 @@ class ScanfyApp(toga.App):
         if asyncio.get_event_loop().is_running():
             asyncio.get_event_loop().create_task(scan(progress_callback))
         else:
-            asyncio.get_event_loop().run_until_complete(scan(progress_callback))
+            # asyncio.get_event_loop().run_until_complete(scan(progress_callback)) 
+            asyncio.run(scan(progress_callback)) # для запуска асинхронного сканирования 
 
 def main():
     return ScanfyApp()
