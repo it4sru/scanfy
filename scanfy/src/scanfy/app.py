@@ -1,12 +1,10 @@
 import toga
 import psutil
 import tracemalloc
-import subprocess
 import ipaddress
 import socket
 import asyncio
 import platform
-import aioping
 from toga.style import Pack
 from toga.style.pack import COLUMN
 
@@ -19,7 +17,7 @@ class ScanfyApp(toga.App):
         self.text_label_subnet = toga.Label('Subnet:', style=Pack(padding=5))
         self.scan_button = toga.Button('Scan', on_press=self.execute_scan)
         self.status_label = toga.Label('', style=Pack(padding=5))
-        self.detailed_list = toga.DetailedList(['IP Address', 'Status']) # Добавляем DetailedList
+        self.detailed_list = toga.DetailedList(['IP Address', 'Status'], style=Pack(flex=1)) # Добавляем DetailedList
         self.detailed_list.data = [] # Инициализируем данные DetailedList пустым списком
 
         content_box = toga.Box(style=Pack(direction=COLUMN, padding=10))
@@ -47,6 +45,16 @@ class ScanfyApp(toga.App):
                         if addr.family == socket.AddressFamily.AF_INET:
                             interfaces.append(interface)
                             break
+        if system == "Darwin":
+            for interface, stats in psutil.net_if_stats().items():
+                if not interface.startswith("lo"):
+                    addrs = psutil.net_if_addrs().get(interface)
+                    if addrs:
+                        for addr in addrs:
+                            if addr.family == socket.AddressFamily.AF_INET:
+                                interfaces.append(interface)
+                                break
+                    
         elif system == "Linux":
             for interface in psutil.net_if_stats().keys():
                 if not interface.startswith("lo"):
@@ -77,17 +85,33 @@ class ScanfyApp(toga.App):
         except socket.herror:
             return "n/a"
 
+    # def get_ip_address(self, interface):
+    #     try:
+    #         return psutil.net_if_addrs()[interface][1].address
+    #     except KeyError:
+    #         return "n/a"
+
     def get_ip_address(self, interface):
         try:
-            return psutil.net_if_addrs()[interface][1].address
+            addresses = psutil.net_if_addrs().get(interface)
+            if addresses:
+                for address in addresses:
+                    if address.family == socket.AF_INET:
+                        return address.address
         except KeyError:
-            return "n/a"
+            pass
+        return "n/a"
 
     def get_subnet_mask(self, interface):
         try:
-            return psutil.net_if_addrs()[interface][1].netmask
+            addresses = psutil.net_if_addrs().get(interface)
+            if addresses:
+                for address in addresses:
+                    if address.family == socket.AF_INET:
+                        return address.netmask
         except KeyError:
-            return "n/a"
+            pass
+        return "n/a"
 
     def get_subnet(self, interface):
         ip_address = self.get_ip_address(interface)
