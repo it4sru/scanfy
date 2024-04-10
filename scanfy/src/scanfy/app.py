@@ -9,6 +9,9 @@ from toga.style import Pack
 from toga.style.pack import COLUMN
 
 class ScanfyApp(toga.App):
+
+    is_scan_running = False
+
     def startup(self):
         self.main_window = toga.MainWindow(title="Scanfy - Network Scanner", size=(300, 400))
         self.interface_dropdown = toga.Selection(on_change=self.interface_selected)
@@ -45,6 +48,7 @@ class ScanfyApp(toga.App):
                         if addr.family == socket.AddressFamily.AF_INET:
                             interfaces.append(interface)
                             break
+
         if system == "Darwin":
             for interface, stats in psutil.net_if_stats().items():
                 if not interface.startswith("lo"):
@@ -85,12 +89,6 @@ class ScanfyApp(toga.App):
         except socket.herror:
             return "n/a"
 
-    # def get_ip_address(self, interface):
-    #     try:
-    #         return psutil.net_if_addrs()[interface][1].address
-    #     except KeyError:
-    #         return "n/a"
-
     def get_ip_address(self, interface):
         try:
             addresses = psutil.net_if_addrs().get(interface)
@@ -121,18 +119,25 @@ class ScanfyApp(toga.App):
             return "n/a"
 
     def update_detailed_list(self, ip_address, status):
-        self.detailed_list.data.append((ip_address, status)) # Добавляем новую пару данных в DetailedList
+        self.detailed_list.data.append((ip_address, status)) 
 
     def execute_scan(self, widget):
+        global is_scan_running
+        if self.is_scan_running:
+            return
+        
+        self.is_scan_running = True
+        self.detailed_list.data = []
+
         selected_interface = self.interface_dropdown.value
         subnet = self.get_subnet(selected_interface)
         hosts = list(subnet.hosts())
-
+        
         async def scan(progress_callback):
             async def process_ip(ip_address):
                 try:
                     result = await asyncio.create_subprocess_shell(
-                        f"ping -n 1 {ip_address}",
+                        f"ping -n 1 -w 3 {ip_address}",
                         stdin=asyncio.subprocess.PIPE,
                         stdout=asyncio.subprocess.PIPE,
                         stderr=asyncio.subprocess.PIPE,
@@ -150,9 +155,11 @@ class ScanfyApp(toga.App):
                     
                 await progress_callback(ip_address, status)
 
-            # await asyncio.gather(*[process_ip(str(ip)) for ip in hosts]) #  для параллельного выполнения асинхронных задач
-            for ip in hosts:                    # для запуска последовательного
-                await process_ip(str(ip))       # синхронного сканирования 
+            #await asyncio.gather(*[process_ip(str(ip)) for ip in hosts]) 
+            for ip in hosts:                    
+                await process_ip(str(ip))
+
+            self.is_scan_running = False
 
         async def progress_callback(ip_address, status):
             self.update_detailed_list(ip_address, status)
@@ -162,7 +169,7 @@ class ScanfyApp(toga.App):
         if asyncio.get_event_loop().is_running():
             asyncio.get_event_loop().create_task(scan(progress_callback))
         else:
-            # asyncio.get_event_loop().run_until_complete(scan(progress_callback)) 
+            #asyncio.get_event_loop().run_until_complete(scan(progress_callback)) 
             asyncio.run(scan(progress_callback)) # для запуска асинхронного сканирования 
 
 def main():
