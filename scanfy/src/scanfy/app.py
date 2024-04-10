@@ -122,12 +122,14 @@ class ScanfyApp(toga.App):
         self.detailed_list.data.append((ip_address, status)) 
 
     def execute_scan(self, widget):
+        
+
         global is_scan_running
         if self.is_scan_running:
             return
         
-        self.is_scan_running = True
         self.detailed_list.data = []
+        self.is_scan_running = True
 
         selected_interface = self.interface_dropdown.value
         subnet = self.get_subnet(selected_interface)
