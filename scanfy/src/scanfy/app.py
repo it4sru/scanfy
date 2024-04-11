@@ -7,6 +7,7 @@ import asyncio
 import platform
 from toga.style import Pack
 from toga.style.pack import COLUMN
+from toga.constants import CENTER, ROW
 
 class ScanfyApp(toga.App):
 
@@ -123,11 +124,12 @@ class ScanfyApp(toga.App):
 
     def execute_scan(self, widget):
         
-
         global is_scan_running
         if self.is_scan_running:
+            #self.execute_scan.stop()
             return
         
+        self.scan_button.text = "..."
         self.detailed_list.data = []
         self.is_scan_running = True
 
@@ -137,6 +139,7 @@ class ScanfyApp(toga.App):
         
         async def scan(progress_callback):
             async def process_ip(ip_address):
+                
                 try:
                     result = await asyncio.create_subprocess_shell(
                         f"ping -n 1 -w 3 {ip_address}",
@@ -162,6 +165,7 @@ class ScanfyApp(toga.App):
                 await process_ip(str(ip))
 
             self.is_scan_running = False
+            self.scan_button.text = "Scan"
 
         async def progress_callback(ip_address, status):
             self.update_detailed_list(ip_address, status)
